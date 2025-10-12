@@ -30,18 +30,18 @@ openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
   -out certs/selfsigned.crt \
   -subj "/CN=${USER_DOMAIN}" >/dev/null 2>&1
 
-# Выбор режима работы
-echo -e "${YELLOW}🔒 Выберите режим SSL:${NC}"
+# Выбор режима работы (по умолчанию - без SSL)
+echo -e "${YELLOW}🔒 Выберите режим SSL (Enter = без SSL):${NC}"
 echo "  1) Let's Encrypt (требует DNS)"
 echo "  2) Самоподписанный 10 лет"
-echo "  3) Без SSL (доступ по IP:5678)"
-read -p "Выберите (1/2/3): " SSL_CHOICE
+echo "  3) Без SSL (доступ по IP:5678) [по умолчанию]"
+read -t 10 -p "Выберите (1/2/3): " SSL_CHOICE || SSL_CHOICE="3"
 
 case "$SSL_CHOICE" in
   1) SSL_MODE="letsencrypt";;
   2) SSL_MODE="selfsigned";;
-  3) SSL_MODE="none";;
-  *) echo -e "${RED}Нужно выбрать 1, 2 или 3${NC}"; exit 1;;
+  3|"") SSL_MODE="none";;
+  *) echo -e "${RED}Используется режим по умолчанию: без SSL${NC}"; SSL_MODE="none";;
 esac
 
 echo -e "${GREEN}✅ Режим: $SSL_MODE${NC}"
