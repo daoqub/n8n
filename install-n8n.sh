@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Цвета
+# Цвета для вывода
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
 # Проверка root
@@ -10,46 +10,45 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# Параметры (пароль без ведущей звёздочки)
+# ====== ПАРАМЕТРЫ ======
 USER_EMAIL="sheepoff@gmail.com"
 USER_DOMAIN="grouchily.ru"
 DB_PASSWORD="V8u2p2rRya8"
 
-# Установка Docker
+# ====== ОБНОВЛЕНИЕ И УСТАНОВКА DOCKER ======
 apt update -qq
 apt install -y docker.io docker-compose curl openssl >/dev/null 2>&1
 systemctl enable --now docker
 
-# Подготовка папок
+# ====== ПАПКИ ======
 mkdir -p /opt/n8n/{postgres,data,certs}
 cd /opt/n8n
 
-# Генерация самоподписанного SSL для теста
+# ====== САМОПОДПИСАННЫЙ SSL ======
 openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
   -keyout certs/selfsigned.key \
   -out certs/selfsigned.crt \
   -subj "/CN=${USER_DOMAIN}" >/dev/null 2>&1
 
-# Выбор режима работы (по умолчанию - без SSL)
-echo -e "${YELLOW}🔒 Выберите режим SSL (Enter = без SSL):${NC}"
-echo "  1) Let's Encrypt (требует DNS)"
-echo "  2) Самоподписанный 10 лет"
-echo "  3) Без SSL (доступ по IP:5678) [по умолчанию]"
+# ====== ВЫБОР РЕЖИМА SSL (авто=без SSL) ======
+echo -e "${YELLOW}🔒 Выберите режим SSL (Enter=без SSL):${NC}"
+echo "  1) Let's Encrypt (нужен DNS)"
+echo "  2) Самоподписанный (10 лет)"
+echo "  3) Без SSL (по IP:5678) [по умолчанию]"
 read -t 10 -p "Выберите (1/2/3): " SSL_CHOICE || SSL_CHOICE="3"
 
 case "$SSL_CHOICE" in
   1) SSL_MODE="letsencrypt";;
   2) SSL_MODE="selfsigned";;
   3|"") SSL_MODE="none";;
-  *) echo -e "${RED}Используется режим по умолчанию: без SSL${NC}"; SSL_MODE="none";;
+  *) echo -e "${RED}Неверный выбор, используется без SSL${NC}"; SSL_MODE="none";;
 esac
-
 echo -e "${GREEN}✅ Режим: $SSL_MODE${NC}"
 
-# Получение внешнего IP
+# ====== ВНЕШНИЙ IP ======
 EXTERNAL_IP=$(curl -s ifconfig.me || echo "127.0.0.1")
 
-# Создание docker-compose.yml
+# ====== СОЗДАНИЕ docker-compose.yml ======
 cat > docker-compose.yml <<EOF
 version: '3.8'
 
@@ -62,7 +61,7 @@ volumes:
 EOF
 
 if [ "$SSL_MODE" != "none" ]; then
-cat >> docker-compose.yml <<EOF
+  cat >> docker-compose.yml <<EOF
   nginx_certs:
   nginx_vhost:
   nginx_html:
@@ -114,7 +113,6 @@ if [ "$SSL_MODE" = "none" ]; then
       - n8n-network
 
 EOF
-
 else
   cat >> docker-compose.yml <<EOF
   nginx-proxy:
@@ -211,14 +209,14 @@ if command -v ufw &>/dev/null; then
   fi
 fi
 
-# Запуск
+# Запуск контейнеров
 echo -e "${GREEN}🚀 Запуск контейнеров...${NC}"
 docker-compose up -d
 sleep 10
 
-# Сохранение паролей
+# Сохранение учётных данных
 cat > /opt/n8n/PASSWORDS.txt <<EOF
-УЧЕТНЫЕ ДАННЫЕ:
+УЧЁТНЫЕ ДАННЫЕ:
 Email: ${USER_EMAIL}
 Пароль PostgreSQL: ${DB_PASSWORD}
 
