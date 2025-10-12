@@ -22,7 +22,8 @@
 ```bash
 # Через curl
 curl -fsSL https://raw.githubusercontent.com/daoqub/n8n/main/install-n8n.sh | sudo bash
-
+```
+```bash
 # Или через wget
 wget -qO- https://raw.githubusercontent.com/daoqub/n8n/main/install-n8n.sh | sudo bash
 ```
