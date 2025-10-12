@@ -10,10 +10,10 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# Параметры
+# Параметры (пароль без ведущей звёздочки)
 USER_EMAIL="sheepoff@gmail.com"
 USER_DOMAIN="grouchily.ru"
-DB_PASSWORD="8V8u2p2rRya8"
+DB_PASSWORD="V8u2p2rRya8"
 
 # Установка Docker
 apt update -qq
@@ -46,7 +46,7 @@ esac
 
 echo -e "${GREEN}✅ Режим: $SSL_MODE${NC}"
 
-# Генерация EXTERNAL_IP
+# Получение внешнего IP
 EXTERNAL_IP=$(curl -s ifconfig.me || echo "127.0.0.1")
 
 # Создание docker-compose.yml
@@ -220,7 +220,7 @@ sleep 10
 cat > /opt/n8n/PASSWORDS.txt <<EOF
 УЧЕТНЫЕ ДАННЫЕ:
 Email: ${USER_EMAIL}
-Parol DB: ${DB_PASSWORD}
+Пароль PostgreSQL: ${DB_PASSWORD}
 
 Доступ:
 EOF
