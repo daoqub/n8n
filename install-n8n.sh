@@ -119,6 +119,7 @@ if [ "$SSL_MODE" = "none" ]; then
     ports:
       - "5678:5678"
     environment:
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
