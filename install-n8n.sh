@@ -258,3 +258,5 @@ fi
 
 chmod 600 /opt/n8n/PASSWORDS.txt
 echo -e "${GREEN}✅ Пароли сохранены в /opt/n8n/PASSWORDS.txt${NC}"
+echo -e "${GREEN}🌐 Откройте в браузере: http://${EXTERNAL_IP}:5678${NC}"
+
