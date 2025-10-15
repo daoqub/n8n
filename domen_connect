@@ -1,45 +1,316 @@
+```markdown
 # Привязка домена к n8n на Google Cloud VPS
 
-Полная пошаговая инструкция для новичков.
+Полная пошаговая инструкция для новичков с автоматическим HTTPS и правильной настройкой.
 
 ---
 
-## 1. Купить и управлять доменом
+## 🎯 Что получится в результате
 
-- Зарегистрируйте домен у любого регистратора ([reg.ru](https://www.reg.ru/), [nic.ru](https://www.nic.ru/), [namecheap.com](https://www.namecheap.com/)).
-- Откройте панель управления DNS вашего домена.
-
----
-
-## 2. Статический IP для VM
-
-- Перейдите в [Google Cloud Console — Compute Engine](https://console.cloud.google.com/compute/instances).
-- В меню слева выберите **VPC network → External IP addresses**: [External IP addresses](https://console.cloud.google.com/networking/addresses/list)
-- Найдите свою VM, рядом с IP нажмите **Reserve** (если нужно).
-- Скопируйте статический IP.
-
-Подробнее: [Официальная документация — External IPs](https://cloud.google.com/compute/docs/ip-addresses#externaladdresses)
+- n8n доступен по вашему домену через HTTPS
+- Автоматический SSL-сертификат от Let's Encrypt
+- Никаких ошибок "Connection lost" или mixed-content
+- Стабильная работа WebSocket и API
 
 ---
 
-## 3. Создайте A-запись для домена
+## 📋 Подготовка
 
-В панели DNS вашего регистратора:
+### 1. Зарегистрируйте домен
 
-- Тип: `A`
-- Имя/Host: `@` (основной домен)
-- Значение: статический IP от VM
-- TTL: по умолчанию
+- Купите домен у любого регистратора: [reg.ru](https://www.reg.ru/), [nic.ru](https://www.nic.ru/), [namecheap.com](https://www.namecheap.com/)
+- Запишите данные для входа в панель управления DNS
 
-Инструкция для Reg.ru: [Добавить DNS-запись](https://www.reg.ru/support/help/domain/dns/)
+### 2. Получите статический IP в Google Cloud
+
+1. Перейдите в [Google Cloud Console — Compute Engine](https://console.cloud.google.com/compute/instances)
+2. В меню слева: **VPC network → External IP addresses** → [External IP addresses](https://console.cloud.google.com/networking/addresses/list)
+3. Найдите свою VM, нажмите **Reserve** рядом с IP
+4. Скопируйте статический IP адрес
+
+**Документация:** [External IP addresses](https://cloud.google.com/compute/docs/ip-addresses#externaladdresses)
+
+### 3. Настройте DNS-запись для домена
+
+В панели управления DNS вашего регистратора добавьте:
+
+- **Тип:** `A`
+- **Имя/Host:** `@` (основной домен)
+- **Значение:** статический IP вашей VM
+- **TTL:** по умолчанию (обычно 300-3600)
+
+**Пример для Reg.ru:** [Добавить DNS-запись](https://www.reg.ru/support/help/domain/dns/)
 
 ---
 
-## 4. Открыть порты на VM и в Google Cloud
+## 🔥 Настройка портов и безопасности
 
-В GCP:  
-- Меню: [Firewall rules](https://console.cloud.google.com/networking/firewalls/list)
-- Создайте правила для — 80 (HTTP), 443 (HTTPS)
+### 4. Откройте порты в Google Cloud Firewall
 
-На VM (Ubuntu/Debian):
+1. Перейдите в [Firewall rules](https://console.cloud.google.com/networking/firewalls/list)
+2. Создайте правила для портов:
+   - **80** (HTTP) — для перенаправления на HTTPS
+   - **443** (HTTPS) — для безопасного доступа
 
+### 5. Настройте UFW на VM (если используется)
+
+```
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 22/tcp
+sudo ufw enable
+```
+
+### 6. ⚠️ КРИТИЧЕСКИ ВАЖНО: Отключите системный nginx
+
+```
+sudo systemctl stop nginx
+sudo systemctl disable nginx
+```
+
+**Почему это важно:** nginx-proxy (контейнер) должен быть единственным, кто слушает порты 80/443. Иначе будет конфликт портов!
+
+---
+
+## 🐳 Установка и настройка Docker Compose
+
+### 7. Установите Docker
+
+```
+sudo apt update
+sudo apt install -y docker.io docker-compose
+sudo systemctl enable --now docker
+```
+
+### 8. Создайте правильный docker-compose.yml
+
+Создайте папку и файл конфигурации:
+
+```
+sudo mkdir -p /opt/n8n
+cd /opt/n8n
+sudo nano docker-compose.yml
+```
+
+Вставьте **ПОЛНУЮ** конфигурацию:
+
+```
+version: '3.8'
+
+networks:
+  n8n-network:
+
+volumes:
+  postgres_data:
+  n8n_data:
+  nginx_certs:
+  nginx_vhost:
+  nginx_html:
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: n8n-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "n8n"
+      POSTGRES_USER: "n8n"
+      POSTGRES_PASSWORD: "ВАШ_НАДЁЖНЫЙ_ПАРОЛЬ"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - n8n-network
+
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+    networks:
+      - n8n-network
+
+  acme-companion:
+    image: nginxproxy/acme-companion
+    container_name: acme-companion
+    restart: unless-stopped
+    depends_on:
+      - nginx-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nginx_certs:/etc/nginx/certs
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+      - /etc/acme.sh:/etc/acme.sh
+    environment:
+      - DEFAULT_EMAIL=ВАШ_EMAIL@ДОМЕН.РУ
+      - NGINX_PROXY_CONTAINER=nginx-proxy
+    networks:
+      - n8n-network
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      - VIRTUAL_HOST=ВАШ_ДОМЕН.РУ
+      - VIRTUAL_PORT=5678
+      - LETSENCRYPT_HOST=ВАШ_ДОМЕН.РУ
+      - LETSENCRYPT_EMAIL=ВАШ_EMAIL@ДОМЕН.РУ
+      - N8N_PROTOCOL=https
+      - N8N_HOST=ВАШ_ДОМЕН.РУ
+      - N8N_PORT=5678
+      - WEBHOOK_URL=https://ВАШ_ДОМЕН.РУ/
+      - N8N_EDITOR_BASE_URL=https://ВАШ_ДОМЕН.РУ/
+      - N8N_PUBLIC_API_BASE_URL=https://ВАШ_ДОМЕН.РУ/
+      - GENERIC_TIMEZONE=Europe/Moscow
+      - N8N_SECURITY_TRUST_PROXY=true
+      - N8N_SECURE_COOKIE=false
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=ВАШ_НАДЁЖНЫЙ_ПАРОЛЬ
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - n8n-network
+```
+
+**🔴 ОБЯЗАТЕЛЬНО замените:**
+- `ВАШ_ДОМЕН.РУ` на свой домен (например: `n8n.example.com`)
+- `ВАШ_EMAIL@ДОМЕН.РУ` на свой email
+- `ВАШ_НАДЁЖНЫЙ_ПАРОЛЬ` на надёжный пароль для PostgreSQL
+
+### 9. Запустите контейнеры
+
+```
+sudo docker-compose up -d
+```
+
+### 10. Проверьте статус
+
+```
+sudo docker-compose ps
+```
+
+Все сервисы должны быть в состоянии "Up".
+
+---
+
+## ✅ Проверка и тестирование
+
+### 11. Дождитесь получения SSL-сертификата
+
+SSL-сертификат выдаётся автоматически, но может занять 5-10 минут. Проверьте логи:
+
+```
+sudo docker-compose logs acme-companion
+```
+
+### 12. Откройте n8n в браузере
+
+Перейдите на **https://ВАШ_ДОМЕН.РУ**
+
+**Что должно быть:**
+- ✅ Интерфейс n8n открывается
+- ✅ В адресной строке "🔒" (защищённое соединение)
+- ✅ Никаких ошибок в консоли браузера (F12)
+
+---
+
+## 🚨 Типичные проблемы и решения
+
+### Ошибка: "Port 443 already in use"
+
+**Причина:** Системный nginx всё ещё работает.
+
+**Решение:**
+```
+sudo systemctl stop nginx
+sudo systemctl disable nginx
+sudo docker-compose up -d
+```
+
+### Ошибка: "Connection lost" в интерфейсе
+
+**Причина:** Неправильные переменные среды (http вместо https).
+
+**Решение:** Проверьте, что ВСЕ переменные в секции n8n содержат https и ваш домен, а не IP.
+
+### Ошибка: "Mixed content blocked"
+
+**Причина:** n8n пытается обращаться к HTTP API со HTTPS страницы.
+
+**Решение:** Убедитесь, что переменные `N8N_EDITOR_BASE_URL` и `N8N_PUBLIC_API_BASE_URL` указывают на https.
+
+### Ошибка: "ERR_ERL_UNEXPECTED_X_FORWARDED_FOR"
+
+**Причина:** n8n не доверяет прокси-серверу.
+
+**Решение:** Переменная `N8N_SECURITY_TRUST_PROXY=true` должна быть в environment секции n8n.
+
+---
+
+## 🔧 Полезные команды
+
+**Посмотреть логи всех сервисов:**
+```
+sudo docker-compose logs
+```
+
+**Посмотреть логи только n8n:**
+```
+sudo docker-compose logs n8n
+```
+
+**Перезапустить все сервисы:**
+```
+sudo docker-compose restart
+```
+
+**Обновить n8n до последней версии:**
+```
+sudo docker-compose pull
+sudo docker-compose up -d
+```
+
+**Проверить, кто занимает порты:**
+```
+sudo netstat -tulpn | grep :443
+sudo netstat -tulpn | grep :80
+```
+
+---
+
+## 📚 Ссылки на документацию
+
+- [n8n установка](https://docs.n8n.io/hosting/installation/server/)
+- [Google Cloud Firewall](https://cloud.google.com/vpc/docs/firewalls)
+- [nginx-proxy документация](https://github.com/nginx-proxy/nginx-proxy)
+- [Let's Encrypt ACME companion](https://github.com/nginx-proxy/acme-companion)
+
+---
+
+## 🎉 Готово!
+
+После выполнения всех шагов у вас будет:
+- ✅ n8n доступен по **https://ВАШ_ДОМЕН.РУ**
+- ✅ Автоматическое продление SSL-сертификата
+- ✅ Стабильная работа без ошибок соединения
+- ✅ Все данные сохраняются в базе PostgreSQL
+
+**Если что-то не работает — проверьте логи и убедитесь, что DNS-запись домена указывает на правильный IP!**
+```
