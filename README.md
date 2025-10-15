@@ -147,6 +147,6 @@ curl -fsSL https://raw.githubusercontent.com/daoqub/n8n/main/install-n8n.sh | su
 Готово! После выполнения инструкции у вас будет полноценный N8N, доступный и по IP, и по домену с SSL.
 
 ```bash
-3x-ui
+##Установка 3x-ui
 wget -qO- https://raw.githubusercontent.com/Oreomeow/3x-ui/master/install/install.sh | bash
 ```
