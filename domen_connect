@@ -1,0 +1,45 @@
+# Привязка домена к n8n на Google Cloud VPS
+
+Полная пошаговая инструкция для новичков.
+
+---
+
+## 1. Купить и управлять доменом
+
+- Зарегистрируйте домен у любого регистратора ([reg.ru](https://www.reg.ru/), [nic.ru](https://www.nic.ru/), [namecheap.com](https://www.namecheap.com/)).
+- Откройте панель управления DNS вашего домена.
+
+---
+
+## 2. Статический IP для VM
+
+- Перейдите в [Google Cloud Console — Compute Engine](https://console.cloud.google.com/compute/instances).
+- В меню слева выберите **VPC network → External IP addresses**: [External IP addresses](https://console.cloud.google.com/networking/addresses/list)
+- Найдите свою VM, рядом с IP нажмите **Reserve** (если нужно).
+- Скопируйте статический IP.
+
+Подробнее: [Официальная документация — External IPs](https://cloud.google.com/compute/docs/ip-addresses#externaladdresses)
+
+---
+
+## 3. Создайте A-запись для домена
+
+В панели DNS вашего регистратора:
+
+- Тип: `A`
+- Имя/Host: `@` (основной домен)
+- Значение: статический IP от VM
+- TTL: по умолчанию
+
+Инструкция для Reg.ru: [Добавить DNS-запись](https://www.reg.ru/support/help/domain/dns/)
+
+---
+
+## 4. Открыть порты на VM и в Google Cloud
+
+В GCP:  
+- Меню: [Firewall rules](https://console.cloud.google.com/networking/firewalls/list)
+- Создайте правила для — 80 (HTTP), 443 (HTTPS)
+
+На VM (Ubuntu/Debian):
+
